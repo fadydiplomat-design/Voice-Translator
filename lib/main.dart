@@ -675,17 +675,6 @@ class _TranslatorPageState extends State<TranslatorPage> {
         onError: (error) {
           if (!mounted) return;
 
-          // "aborted" fires whenever our own code deliberately calls
-          // _speech.stop() (to hand the recognized sentence off to
-          // translation, or to start the next listening session) — it's
-          // expected, not a real failure. Treating it as one was causing a
-          // second, competing restart on top of the one our own code
-          // already schedules, which never gave recognition a real chance
-          // to capture speech.
-          if (error.errorMsg.toLowerCase().contains('abort')) {
-            return;
-          }
-
           setState(() {
             _listening = false;
             _error = error.errorMsg;
@@ -1150,13 +1139,6 @@ class _TranslatorPageState extends State<TranslatorPage> {
       await _applySelectedTtsVoice();
       await _tts.setSpeechRate(_speechRate);
       await _tts.speak(text);
-      // awaitSpeakCompletion isn't reliably honored on every platform
-      // (notably Flutter Web/Safari), so also wait on the _speaking flag
-      // itself — it's driven by the TTS start/completion/cancel/error
-      // handlers — before letting the caller move on (e.g. restart the
-      // microphone in live mode). A safety timeout keeps this from ever
-      // hanging if a platform never fires the completion callback.
-      await _waitUntilSpeakingStops();
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -1164,21 +1146,6 @@ class _TranslatorPageState extends State<TranslatorPage> {
           _speaking = false;
         });
       }
-    }
-  }
-
-  Future<void> _waitUntilSpeakingStops() async {
-    // Give the start handler a brief moment to fire and flip `_speaking`
-    // to true before we start checking for it to flip back to false.
-    await Future.delayed(const Duration(milliseconds: 150));
-
-    const step = Duration(milliseconds: 150);
-    const maxWait = Duration(seconds: 20);
-    var waited = Duration.zero;
-
-    while (_speaking && waited < maxWait) {
-      await Future.delayed(step);
-      waited += step;
     }
   }
 
@@ -2161,21 +2128,7 @@ class _TranslatorPageState extends State<TranslatorPage> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: (_liveMode && !_liveProcessing && !_listening)
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFF39FF14).withValues(alpha: 0.65),
-                                blurRadius: 24,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : const [],
-                    ),
-                    child: SizedBox(
+                  SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
@@ -2204,7 +2157,6 @@ class _TranslatorPageState extends State<TranslatorPage> {
                             ? 'إيقاف الترجمة الصوتية الفورية'
                             : 'تشغيل الترجمة الصوتية الفورية',
                       ),
-                    ),
                     ),
                   ),
                   if (_liveMode) ...[
